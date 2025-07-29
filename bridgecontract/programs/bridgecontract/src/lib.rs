@@ -5,7 +5,6 @@ use anchor_lang::solana_program::{
     keccak,
 };
 
-
  declare_id!("HZnbK4bXJC9LLCE7DJxrabmKgBqpB8JM4ySRbpnwYrfT");
 
 #[program]
@@ -37,8 +36,8 @@ pub struct MintWrappedNft<'info> {
     payer = payer,
     seeds = [
         b"wrapped_nft_mint",
-        original_nft_contract_info.as_bytes(),
-        original_token_id.as_bytes()
+        &original_nft_contract_info.as_bytes()[..10],
+        &original_token_id.as_bytes()[..10]
     ],
     bump,
     mint::decimals = 0,
@@ -46,7 +45,6 @@ pub struct MintWrappedNft<'info> {
     mint::freeze_authority = mint_authority,
    )]
     pub wrapped_asset_mint: Account<'info, Mint>,
-
 
     /// CHECK: This is the mint authority PDA that will be used to mint tokens
     #[account(

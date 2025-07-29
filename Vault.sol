@@ -3,6 +3,7 @@
 pragma solidity ^0.8.20;
 
 import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.0.1/contracts/token/ERC721/IERC721.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.0.1/contracts/token/ERC721/IERC721Receiver.sol";
 
 
 contract NftVault {
@@ -22,12 +23,11 @@ contract NftVault {
 
         IERC721 nft = IERC721(_nftContract);
 
-        //  Verify that the person calling this function is the owner of the NFT.
+        
         require(nft.ownerOf(_tokenId) == msg.sender, "Caller is not the owner of the NFT");
 
-        // Transfer the NFT from the user's wallet to this contract's custody.
-        nft.safeTransferFrom(msg.sender, address(this), _tokenId);
-
+        
+        nft.transferFrom(msg.sender, address(this), _tokenId);
         // Emit the event
         emit NftLocked(msg.sender, _nftContract, _tokenId, _solanaRecipient);
     }
