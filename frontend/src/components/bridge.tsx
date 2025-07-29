@@ -1,28 +1,25 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { useConnection, useAnchorWallet , useWallet } from '@solana/wallet-adapter-react';
 import { ethers } from 'ethers';
 import { NFT_VAULT_ABI } from '../lib/ABI.ts';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
-import { walletAdapterIdentity } from '@metaplex-foundation/umi-signer-wallet-adapters';
+import idl from "../lib/IDL.json"
+import * as anchor from '@coral-xyz/anchor';
+import { Program } from '@coral-xyz/anchor';
 import { Signature } from "ethers";
+import type {NftBridgeMinter}  from '../types/nft_bridge';
 
 const BridgeComponent = () => {
-    // Initialize UMI
+    
     const { connection: solConnection } = useConnection();
-    const wallet = useWallet();
-    const umi = createUmi(solConnection.rpcEndpoint)
-        .use(mplTokenMetadata())
-        .use(walletAdapterIdentity(wallet));
-    // State for Ethereum connection
+    const wallet = useAnchorWallet();
     const [ethAccount, setEthAccount] = useState<string | null>(null);
     const [ethSigner, setEthSigner] = useState<ethers.Signer | null>(null);
 
    
     // State for Solana connection from the adapter
     
-    const { publicKey: solPublicKey, sendTransaction } = useWallet();
+    const { publicKey: solPublicKey } = useWallet();
 
     // UI State
     const [nftContract, setNftContract] = useState('');
@@ -82,11 +79,11 @@ const BridgeComponent = () => {
 
        
         
-        log('2. Locking NFT in the vault...');
-        const solanaAddressBytes32 = '0x' + solPublicKey!.toBuffer().toString('hex');
-        const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
-        await lockTx.wait();
-        log(`Lock successful! Tx: ${lockTx.hash}`);
+        // log('2. Locking NFT in the vault...');
+        // const solanaAddressBytes32 = '0x' + solPublicKey!.toBuffer().toString('hex');
+        // const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
+        // await lockTx.wait();
+        // log(`Lock successful! Tx: ${lockTx.hash}`);
 
         setIsLocked(true); // Enable the next step
     } catch (error : any) {
@@ -97,8 +94,7 @@ const BridgeComponent = () => {
 };
 
     const handleMint = async () => {
-    // ... (Add your Solana program ID and IDL)
-    
+    const SOLANA_PROGRAM_ID = new anchor.web3.PublicKey(idl.address)
     setIsLoading(true);
     log('Starting mint...');
 
@@ -108,22 +104,38 @@ const BridgeComponent = () => {
         log(`Signing message: "${message}"`);
         const signature = await ethSigner?.signMessage(message);
 
-        // 2. Prepare arguments for Anchor
+        
         const { r, s, v } = Signature.from(signature);
         const recoveryId = v - 27;
+        console.log(`Signature R: ${r}, S: ${s}, Recovery ID: ${recoveryId}`);
         
-        // ... (Setup Anchor provider and program)
-        // const program = new anchor.Program(...)
+        
+        const provider = new anchor.AnchorProvider(solConnection , wallet!, { commitment: "confirmed" })
+        anchor.setProvider(provider);
+        const program = new Program(idl as NftBridgeMinter , provider)
+        
+        const [mintAuthorityPDA] = anchor.web3.PublicKey.findProgramAddressSync(
+            [Buffer.from("wrapped_asset_mint_auth")],
+            program.programId
+        );
 
-        // 3. Call the mint_wrapped instruction (assuming it's modified for NFTs)
-        // const tx = await program.methods.mintWrapped(
-        //     Array.from(ethers.utils.arrayify(ethAccount)),
-        //     new anchor.BN(tokenId), // Pass tokenId
-        //     Array.from(r),
-        //     Array.from(s),
-        //     recoveryId
-        // ).rpc();
+        const tx = await program.methods.mint(
+            Array.from(ethers.getBytes(ethAccount!)),
+            tokenId,
+            nftContract,
+            Array.from(ethers.getBytes(r)),
+            Array.from(ethers.getBytes(s)),
+            recoveryId
+        ).accounts({
 
+            mintAuthorityPDA, 
+            wrappedAssetMint: anchor.web3.PublicKey.findProgramAddressSync(
+                [Buffer.from("wrapped_nft"), Buffer.from(nftContract), Buffer.from(tokenId)],
+                program.programId
+            )[0],
+            
+        })
+        
         log(`Mint successful! Solana Tx: `);
     } catch (error : any ) {
         log(`Error during mint: ${error.message}`);
@@ -188,7 +200,7 @@ const BridgeComponent = () => {
                     </div>
                 </div>
 
-                {/* Log Output */}
+               
                 <div className="mt-8">
                     <h3 className="text-xl font-semibold mb-2">Logs</h3>
                     <pre className="bg-gray-900 p-4 rounded-lg h-64 overflow-y-auto text-sm text-gray-300">
