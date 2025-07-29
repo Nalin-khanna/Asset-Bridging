@@ -88,9 +88,9 @@ const BridgeComponent = () => {
         const solanaAddressBytes32 = '0x' + solPublicKey!.toBuffer().toString('hex');
         console.log("Solana address as bytes32:", solanaAddressBytes32);
         console.log("NFT Contract:", nftContract , "Token ID:", tokenId);
-        // const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
-        // await lockTx.wait();
-        // log(`Lock successful! Tx: ${lockTx.hash}`);
+        const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
+        await lockTx.wait();
+        log(`Lock successful! Tx: ${lockTx.hash}`);
 
         setIsLocked(true); // Enable the next step
     } catch (error : any) {
@@ -135,7 +135,9 @@ const BridgeComponent = () => {
             false
         );
         console.log(recipientTokenAccount.toBase58());
-        const tx = await program.methods.mint(
+        console.log("About to send transaction. Wallet connected:", wallet?.publicKey);
+       
+       const tx = await program.methods.mint(
             Array.from(ethers.getBytes(ethAccount!)),
             tokenId,
             nftContract,
@@ -151,8 +153,7 @@ const BridgeComponent = () => {
             system_program : SystemProgram.programId,
             token_program : TOKEN_PROGRAM_ID,
             associated_token_program : ASSOCIATED_TOKEN_PROGRAM_ID,
-        }).signers([  
-        ]).rpc();
+        }).rpc();
 
         console.log("tx: ",tx);
         
