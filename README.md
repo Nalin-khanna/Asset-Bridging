@@ -1,111 +1,55 @@
-Simple ETH → SOL NFT Bridge
-This project demonstrates a foundational, decentralized bridge for transferring Non-Fungible Tokens (NFTs) from the Ethereum network to the Solana network. It uses a "Lock-and-Mint" pattern where an NFT is locked in a smart contract on Ethereum, and a corresponding "wrapped" version is minted on Solana after cryptographic verification.
+# 🪄 NFT Bridge Minter (Solana Program)
 
-The entire process is orchestrated by a user-facing React frontend, which guides the user through the two-chain workflow without a centralized backend relayer.
+This Solana Anchor-based smart contract allows minting **wrapped NFTs** on Solana after verifying an **Ethereum ECDSA signature**. It acts as a trustless bridge for NFTs from Ethereum to Solana.
 
-Project Architecture
-The bridge consists of three core components:
+---
 
-Ethereum Vault Contract (NftVault.sol): A Solidity smart contract deployed on an Ethereum-compatible network (e.g., Sepolia testnet). Its sole responsibility is to securely lock ERC-721 tokens and emit an event as a public proof-of-lock.
+## ⚙️ Features
 
-Solana Minter Program (nft_bridge_minter): An Anchor smart contract deployed on the Solana network (e.g., Devnet). This program verifies the proof-of-lock from Ethereum by checking a user's cryptographic signature and, upon success, mints a new SPL token representing the locked NFT.
+-  Verifies Ethereum signatures using `secp256k1_recover`
+-  Ensures the message was signed by the rightful Ethereum address
+-  Mints a wrapped NFT to a Solana wallet
+-  Uses deterministic PDAs for mint & authority
+-  The Ethereum contract locks the NFT in an escrow.
 
-React Frontend (BridgeComponent.jsx): A user interface built with React, Ethers.js, and Anchor. It connects to the user's MetaMask (Ethereum) and Phantom (Solana) wallets to guide them through the two-step bridging process.
+---
 
-How It Works
-The bridging process is atomic from the user's perspective but involves a sequence of transactions across two chains.
+##  Structure
 
-Bridging from Ethereum → Solana
-Connect Wallets: The user connects both their MetaMask and Phantom wallets to the frontend application.
+- **Main Instruction:** `mint_wrapped_nft`
+- **Accounts:**
+  - `wrapped_asset_mint`: The mint account for the wrapped NFT
+  - `mint_authority`: PDA with mint authority
+  - `recipient_token_account`: Token account receiving the wrapped NFT
+  - `recipient_owner`: Solana wallet receiving the NFT
+  - `payer`: The transaction fee payer
 
-Approve: The user initiates the lock process. The frontend first sends an approve transaction to the original NFT contract, giving the NftVault contract permission to manage that specific NFT.
+---
 
-Lock: Immediately after approval, the frontend sends a lock transaction to the NftVault contract. The NFT is transferred into the vault for safekeeping, and the contract emits an NftLocked event.
+##  How it Works
 
-Sign Proof: The frontend constructs a unique, human-readable message (e.g., "Bridge NFT with Token ID 123 from contract 0x... to Solana address ...abc"). The user signs this message with their MetaMask wallet. This signature is the unforgeable proof that the owner authorized the bridge.
+1. Ethereum signs a message , locks the NFT
+2. This message is verified using Ethereum's ECDSA via secp256k1.
+3. If verified, a wrapped NFT is minted to the provided Solana wallet.
 
-Verify & Mint: The frontend sends a transaction to the Solana Minter program, including the signed proof. The Solana program then performs the verification and minting.
+##  Instruction: `mint_wrapped_nft`
 
-The secp256k1 Verification
-The security of this entire bridge relies on the cryptographic verification performed on Solana. This is made possible by the secp256k1 elliptic curve, which is the standard used by both Ethereum and Bitcoin.
+```rust
+pub fn mint_wrapped_nft(
+ ctx: Context<MintWrappedNft>,
+ eth_address: [u8; 20],
+ original_token_id: String,
+ original_nft_contract_info : String, 
+ signature_r: [u8; 32],
+ signature_s: [u8; 32],
+ recovery_id: u8,
+) -> Result<()>
+```
 
-Signing on Ethereum: When a user signs a message with MetaMask, the wallet uses the user's private key and the message hash to produce a unique digital signature. The formula is essentially:
-private key + message hash → signature
+4. Signature Verification
+We reconstruct the Ethereum-signed message and hash it using Keccak-256. The recovered public key is then converted to an Ethereum address and matched against the provided one
 
-Recovering on Solana: The Solana program uses a special, highly efficient instruction called secp256k1_recover. This function performs the reverse operation. It takes the signature and the exact same message hash to mathematically recover the public key of the account that must have created it. The formula is:
-signature + message hash → public key
 
-The Solana program then simply checks if the recovered public key matches the Ethereum address the user claimed to be. If they match, the proof is valid. This process is secure because without the original private key, it is computationally impossible to create a valid signature that would recover the correct public key.
-
-How to Set Up and Run
-Prerequisites
-Node.js (v18 or higher)
-
-Yarn or npm
-
-Rust and Cargo
-
-Solana CLI tool suite
-
-Anchor CLI (avm install latest, avm use latest)
-
-MetaMask browser extension
-
-Phantom browser extension
-
-Step 1: Deploy the Ethereum Contract
-Open the NftVault.sol contract in an IDE like Remix.
-
-Compile the contract with Solidity compiler version ^0.8.20.
-
-Connect your MetaMask to an Ethereum testnet (e.g., Sepolia).
-
-Deploy the contract.
-
-Copy the deployed contract address. You will need this for the frontend.
-
-Step 2: Deploy the Solana Program
-Navigate to the Solana program directory: programs/nft_bridge_minter/.
-
-Crucially, open Cargo.toml and add the secp256k1-program feature flag if it's not already there:
-
-[features]
-secp256k1-program = []
-
-From the project root, run anchor build. This will compile the program and generate its IDL (Interface Definition Language).
-
-Run anchor deploy.
-
-Copy the Program ID from the deployment output.
-
-Copy the generated IDL file from target/idl/nft_bridge_minter.json into your frontend's src/lib/ directory.
-
-Step 3: Configure and Run the Frontend
-Navigate to the frontend/ directory.
-
-Install dependencies: npm install.
-
-In your BridgeComponent.jsx or a config file, update the following constants:
-
-NFT_VAULT_ADDRESS: The Ethereum contract address from Step 1.
-
-SOLANA_PROGRAM_ID: The Solana Program ID from Step 2.
-
-WRAPPED_NFT_MINT_PUBKEY: The public key of the SPL Token Mint you created on Solana to represent the wrapped NFT collection.
-
-Start the React development server: npm run dev.
-
-Open your browser to http://localhost:5173 (or the specified port) to use the bridge.
-
-Key Technologies
-Solidity: For the Ethereum smart contract.
-
-Rust: For the Solana smart contract.
-
-Anchor Framework: For rapid development on Solana.
-
-React: For the frontend user interface.
-
-Ethers.js: For interacting with the Ethereum blockchain.
-
-@solana/wallet-adapter: For seamless integration with Solana wallets like Phantom.
+## Build & Test
+anchor build
+anchor test
