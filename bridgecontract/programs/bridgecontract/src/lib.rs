@@ -11,21 +11,85 @@ use anchor_lang::solana_program::{
 #[program]
 pub mod nft_bridge_minter {
     use super::*;
+    pub fn mint(ctx : Context<MintWrappedNft> , eth_address: [u8; 20],
+        original_token_id: String,
+        original_nft_contract_info : String, 
+        signature_r: [u8; 32],
+        signature_s: [u8; 32],
+        recovery_id: u8, ) -> Result<()>{
+            
+        ctx.accounts.mint_wrapped_nft(eth_address , 
+            original_token_id, 
+            original_nft_contract_info, 
+            signature_r, 
+            signature_s, 
+            recovery_id, 
+            &ctx.bumps)
+    }
+}
 
+
+#[derive(Accounts)]
+#[instruction(original_nft_contract_info : String , original_token_id : String)]
+pub struct MintWrappedNft<'info> {
+    #[account(
+    init,
+    payer = payer,
+    seeds = [
+        b"wrapped_nft_mint",
+        original_nft_contract_info.as_bytes(),
+        original_token_id.as_bytes()
+    ],
+    bump,
+    mint::decimals = 0,
+    mint::authority = mint_authority,
+    mint::freeze_authority = mint_authority,
+   )]
+    pub wrapped_asset_mint: Account<'info, Mint>,
+
+
+    /// CHECK: This is the mint authority PDA that will be used to mint tokens
+    #[account(
+        seeds = [b"wrapped_asset_mint_auth"],
+        bump
+    )]
+    pub mint_authority: AccountInfo<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = payer,
+        associated_token::mint = wrapped_asset_mint,
+        associated_token::authority = recipient_owner,
+    )]
+    pub recipient_token_account: Account<'info, TokenAccount>,
+    
+    /// CHECK: This is the recipient owner
+    pub recipient_owner: SystemAccount<'info>,
+    
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
+    
+}
+
+impl <'info> MintWrappedNft <'info> {
     pub fn mint_wrapped_nft(
-        ctx: Context<MintWrappedNft>,
+        & self,
         eth_address: [u8; 20],
         original_token_id: String,
         original_nft_contract_info : String, 
         signature_r: [u8; 32],
         signature_s: [u8; 32],
         recovery_id: u8,
+        bumps : &MintWrappedNftBumps,
     ) -> Result<()> {
-        
-        let recipient_sol_addr_str = ctx.accounts.recipient_owner.key().to_string();
-        
-        
-        
+
+        let recipient_sol_addr_str = self.recipient_owner.key().to_string();
+
         let message_str = format!(
             "Bridge NFT with Token ID {} from contract {} to Solana address {}",
             original_token_id,
@@ -59,57 +123,24 @@ pub mod nft_bridge_minter {
         msg!("Signature verification successful!");
 
         let cpi_accounts = MintTo {
-            mint: ctx.accounts.wrapped_asset_mint.to_account_info(),
-            to: ctx.accounts.recipient_token_account.to_account_info(),
-            authority: ctx.accounts.mint_authority.to_account_info(),
+            mint: self.wrapped_asset_mint.to_account_info(),
+            to: self.recipient_token_account.to_account_info(),
+            authority: self.mint_authority.to_account_info(),
         };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        
-        let seeds = b"wrapped_asset_mint_auth";
-        let bump = ctx.bumps.mint_authority;
-        let signer_seeds: &[&[&[u8]]] = &[&[seeds, &[bump]]];
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts).with_signer(signer_seeds);
+        let cpi_program = self.token_program.to_account_info();
 
-        // We mint 1 token to represent the single NFT.
+        let seeds = b"wrapped_asset_mint_auth";
+        let bump = bumps.mint_authority;
+        let signer_seeds: &[&[&[u8]]] = &[&[seeds, &[bump]]];
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+
+        
         token::mint_to(cpi_ctx, 1)?;
         
-        msg!("Minted 1 wrapped NFT to {}", ctx.accounts.recipient_owner.key());
+        msg!("Minted 1 wrapped NFT to {}", self.recipient_owner.key());
 
         Ok(())
     }
-}
-
-#[derive(Accounts)]
-pub struct MintWrappedNft<'info> {
-    #[account(mut)]
-    pub wrapped_asset_mint: Account<'info, Mint>,
-
-    /// CHECK: This is the mint authority PDA that will be used to mint tokens
-    #[account(
-        seeds = [b"wrapped_asset_mint_auth"],
-        bump
-    )]
-    pub mint_authority: AccountInfo<'info>,
-
-    #[account(
-        init_if_needed,
-        payer = payer,
-        associated_token::mint = wrapped_asset_mint,
-        associated_token::authority = recipient_owner,
-    )]
-    pub recipient_token_account: Account<'info, TokenAccount>,
-    
-    /// CHECK: This is the recipient owner
-    pub recipient_owner: SystemAccount<'info>,
-    
-
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 #[error_code]

@@ -81,43 +81,14 @@ const BridgeComponent = () => {
         
 
        
-        const metadata_for_solana = {
-            "name": metadataJson.name,
-            "description": metadataJson.description,
-            "image": imageHttpUri,
-            "external_url": "https://example.com/my-nft.json",
-            "attributes": [
-              {
-                "trait_type": "trait1",
-                "value": "value1"
-              },
-              {
-                "trait_type": "trait2",
-                "value": "value2"
-              }
-            ],
-            "properties": {
-              "files": [
-                {
-                  "uri": imageHttpUri,
-                  "type": "image/png"
-                }
-              ],
-              "category": "image"
-            }
-          }
+        
+        log('2. Locking NFT in the vault...');
+        const solanaAddressBytes32 = '0x' + solPublicKey!.toBuffer().toString('hex');
+        const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
+        await lockTx.wait();
+        log(`Lock successful! Tx: ${lockTx.hash}`);
 
-        const metadataUri = await umi.uploader.uploadJson(metadata_for_solana).catch((err) => {
-            throw new Error(err)
-          })  
-        console.log('Metadata URI: ', metadataUri)
-        // log('2. Locking NFT in the vault...');
-        // const solanaAddressBytes32 = '0x' + solPublicKey!.toBuffer().toString('hex');
-        // const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
-        // await lockTx.wait();
-        // log(`Lock successful! Tx: ${lockTx.hash}`);
-
-        // setIsLocked(true); // Enable the next step
+        setIsLocked(true); // Enable the next step
     } catch (error : any) {
         log(`Error during lock: ${error.message}`);
     } finally {
@@ -127,9 +98,7 @@ const BridgeComponent = () => {
 
     const handleMint = async () => {
     // ... (Add your Solana program ID and IDL)
-    // You would first need to modify your Solana program to accept a tokenId
-    // instead of an amount. Let's assume you've done that.
-
+    
     setIsLoading(true);
     log('Starting mint...');
 
