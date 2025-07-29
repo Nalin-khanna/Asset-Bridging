@@ -8,7 +8,8 @@ import * as anchor from '@coral-xyz/anchor';
 import { Program } from '@coral-xyz/anchor';
 import { Signature } from "ethers";
 import type {NftBridgeMinter}  from '../types/nft_bridge';
-
+import { getAssociatedTokenAddressSync , TOKEN_PROGRAM_ID , ASSOCIATED_TOKEN_PROGRAM_ID} from "@solana/spl-token";
+import { PublicKey , SystemProgram } from "@solana/web3.js";
 const BridgeComponent = () => {
     
     const { connection: solConnection } = useConnection();
@@ -51,8 +52,8 @@ const BridgeComponent = () => {
 };
 
     const handleLock = async () => {
-    
-    const NFT_VAULT_ADDRESS = "0xf10f170071d495b9e2da7683568fe77cfab63161";
+    // 0xEB6E6c629B37532927b10A26FB0E622771A7B35e
+    const NFT_VAULT_ADDRESS = "0xeb6e6c629b37532927b10a26fb0e622771a7b35e";
     const ERC721_ABI = [ "function approve(address to, uint256 tokenId)", "function tokenURI(uint256 tokenId) view returns (string)"];
 
     setIsLoading(true);
@@ -79,11 +80,13 @@ const BridgeComponent = () => {
 
        
         
-        // log('2. Locking NFT in the vault...');
-        // const solanaAddressBytes32 = '0x' + solPublicKey!.toBuffer().toString('hex');
-        // const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
-        // await lockTx.wait();
-        // log(`Lock successful! Tx: ${lockTx.hash}`);
+        log('2. Locking NFT in the vault...');
+        const solanaAddressBytes32 = '0x' + solPublicKey!.toBuffer().toString('hex');
+        console.log("Solana address as bytes32:", solanaAddressBytes32);
+        console.log("NFT Contract:", nftContract , "Token ID:", tokenId);
+        const lockTx = await vault.lock(nftContract, tokenId, solanaAddressBytes32);
+        await lockTx.wait();
+        log(`Lock successful! Tx: ${lockTx.hash}`);
 
         setIsLocked(true); // Enable the next step
     } catch (error : any) {
@@ -94,7 +97,6 @@ const BridgeComponent = () => {
 };
 
     const handleMint = async () => {
-    const SOLANA_PROGRAM_ID = new anchor.web3.PublicKey(idl.address)
     setIsLoading(true);
     log('Starting mint...');
 
@@ -118,7 +120,16 @@ const BridgeComponent = () => {
             [Buffer.from("wrapped_asset_mint_auth")],
             program.programId
         );
+        const wrappedAssetMint = anchor.web3.PublicKey.findProgramAddressSync(
+            [Buffer.from("wrapped_asset_mint"), Buffer.from(nftContract), Buffer.from(tokenId)],
+            program.programId
+        )[0];
 
+        const recipientTokenAccount = getAssociatedTokenAddressSync(
+            wrappedAssetMint,
+            solPublicKey!,
+            false
+        );
         const tx = await program.methods.mint(
             Array.from(ethers.getBytes(ethAccount!)),
             tokenId,
@@ -127,16 +138,20 @@ const BridgeComponent = () => {
             Array.from(ethers.getBytes(s)),
             recoveryId
         ).accounts({
+            wrapped_asset_mint: wrappedAssetMint,
+            mint_authority : mintAuthorityPDA,
+            recipient_token_account : recipientTokenAccount,
+            recipient_owner : solPublicKey!,
+            payer : solPublicKey!,
+            system_program : SystemProgram.programId,
+            token_program : TOKEN_PROGRAM_ID,
+            associated_token_program : ASSOCIATED_TOKEN_PROGRAM_ID,
+        }).signers([  
+        ]).rpc();
 
-            mintAuthorityPDA, 
-            wrappedAssetMint: anchor.web3.PublicKey.findProgramAddressSync(
-                [Buffer.from("wrapped_nft"), Buffer.from(nftContract), Buffer.from(tokenId)],
-                program.programId
-            )[0],
-            
-        })
+        console.log("tx: ",tx);
         
-        log(`Mint successful! Solana Tx: `);
+        log(`Mint successful! Solana Tx: ${tx}`);
     } catch (error : any ) {
         log(`Error during mint: ${error.message}`);
     } finally {
