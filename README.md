@@ -1,10 +1,10 @@
-# 🪄 NFT Bridge Minter (Solana Program)
+#  NFT Bridge Minter (Solana Program)
 
 This Solana Anchor-based smart contract allows minting **wrapped NFTs** on Solana after verifying an **Ethereum ECDSA signature**. It acts as a trustless bridge for NFTs from Ethereum to Solana.
 
 ---
 
-## ⚙️ Features
+##  Features
 
 -  Verifies Ethereum signatures using `secp256k1_recover`
 -  Ensures the message was signed by the rightful Ethereum address
